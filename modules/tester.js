@@ -59,7 +59,7 @@ var Tester = function Tester(casper, options) {
 
     this.currentTestFile = null;
     this.currentSuiteNum = 0;
-    this.exporter = require('xunit').create();
+    this.exporters = {};
     this.loadIncludes = {
         includes: [],
         pre:      [],
@@ -83,20 +83,12 @@ var Tester = function Tester(casper, options) {
     };
 
     this.configure();
-
+    
     this.on('success', function onSuccess(success) {
         this.testResults.passes.push(success);
-        this.exporter.addSuccess(fs.absolute(success.file), success.message || success.standard);
     });
 
     this.on('fail', function onFail(failure) {
-        // export
-        this.exporter.addFailure(
-            fs.absolute(failure.file),
-            failure.message  || failure.standard,
-            failure.standard || "test failed",
-            failure.type     || "unknown"
-        );
         this.testResults.failures.push(failure);
         // special printing
         if (failure.type) {
@@ -124,6 +116,15 @@ var Tester = function Tester(casper, options) {
 // Tester class is an EventEmitter
 utils.inherits(Tester, events.EventEmitter);
 exports.Tester = Tester;
+
+/*
+ * Adds or overwrites exporter in exporters
+ */
+Tester.prototype.addExporter = function addExporter(name, parameters){
+    this.exporters[name] = parameters;
+    this.emit('exporter.added', name);
+    this.createExporter(name);
+};
 
 /**
  * Asserts that a condition strictly resolves to true. Also returns an
@@ -668,6 +669,17 @@ Tester.prototype.configure = function configure() {
 };
 
 /**
+ * Creates exporter and binds events to test success and fails
+ *
+ * @param  String  exporter
+ */
+Tester.prototype.createExporter = function createExporter(exporter){
+    if( exporter ){
+        require(exporter).create(this, this.exporters[exporter]);
+    }
+};
+
+/**
  * Declares the current test suite done.
  *
  */
@@ -867,10 +879,10 @@ Tester.prototype.renderFailureDetails = function renderFailureDetails(failures) 
  *
  * @param  Boolean  exit
  */
-Tester.prototype.renderResults = function renderResults(exit, status, save) {
+Tester.prototype.renderResults = function renderResults(exit, status) {
     "use strict";
     /*jshint maxstatements:20*/
-    save = save || this.options.save;
+
     var total = this.testResults.passed + this.testResults.failed, statusText, style, result;
     var exitStatus = ~~(status || (this.testResults.failed > 0 ? 1 : 0));
     if (total === 0) {
@@ -892,9 +904,9 @@ Tester.prototype.renderResults = function renderResults(exit, status, save) {
     if (this.testResults.failed > 0) {
         this.renderFailureDetails(this.testResults.failures);
     }
-    if (save) {
-        this.saveResults(save);
-    }
+    
+    this.emit('exporter.save');
+
     if (exit === true) {
         this.casper.exit(exitStatus);
     }
@@ -961,25 +973,6 @@ Tester.prototype.runTest = function runTest(testFile) {
     this.bar(f('Test file: %s', testFile), 'INFO_BAR');
     this.running = true; // this.running is set back to false with done()
     this.exec(testFile);
-};
-
-/**
- * Saves results to file.
- *
- * @param   String  filename  Target file path.
- */
-Tester.prototype.saveResults = function saveResults(filepath) {
-    "use strict";
-    // FIXME: looks like phantomjs has a pb with fs.isWritable https://groups.google.com/forum/#!topic/casperjs/hcUdwgGZOrU
-    // if (!fs.isWritable(filepath)) {
-    //     throw new CasperError(f('Path %s is not writable.', filepath));
-    // }
-    try {
-        fs.write(filepath, this.exporter.getXML(), 'w');
-        this.casper.echo(f('Result log stored in %s', filepath), 'INFO', 80);
-    } catch (e) {
-        this.casper.echo(f('Unable to write results to %s: %s', filepath, e), 'ERROR', 80);
-    }
 };
 
 /**
