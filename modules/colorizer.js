@@ -55,7 +55,11 @@ var Colorizer = function Colorizer() {
     var options    = { bold: 1, underscore: 4, blink: 5, reverse: 7, conceal: 8 };
     var foreground = { black: 30, red: 31, green: 32, yellow: 33, blue: 34, magenta: 35, cyan: 36, white: 37 };
     var background = { black: 40, red: 41, green: 42, yellow: 43, blue: 44, magenta: 45, cyan: 46, white: 47 };
-    var styles     = {
+
+    /**
+     * Declares styles as an object, this can be extended to add more. Use mergeObject()
+     */
+    this.styles    = {
         'ERROR':     { bg: 'red', fg: 'white', bold: true },
         'INFO':      { fg: 'green', bold: true },
         'TRACE':     { fg: 'green', bold: true },
@@ -75,10 +79,10 @@ var Colorizer = function Colorizer() {
      * @return  String
      */
     this.colorize = function colorize(text, styleName, pad) {
-        if (fs.isWindows() || !(styleName in styles)) {
+        if (fs.isWindows() || !(styleName in this.styles)) {
             return text;
         }
-        return this.format(text, styles[styleName], pad);
+        return this.format(text, this.styles[styleName], pad);
     };
 
     /**
