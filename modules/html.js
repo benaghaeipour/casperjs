@@ -3,34 +3,19 @@
 var utils = require('utils');
 var fs = require('fs');
 
-/**
- * Generates a value for 'classname' attribute of the JUnit XML report.
- *
- * Uses the (relative) file name of the current casper script without file
- * extension as classname.
- *
- * @param  String  classname
- * @return String
- */
-// function generateClassName(classname) {
-//     "use strict";
-//     classname = classname.replace(phantom.casperPath, "").trim();
-//     var script = classname || phantom.casperScript;
-//     if (script.indexOf(fs.workingDirectory) === 0) {
-//         script = script.substring(fs.workingDirectory.length + 1);
-//     }
-//     if (script.indexOf('/') === 0) {
-//         script = script.substring(1, script.length);
-//     }
-//     if (~script.indexOf('.')) {
-//         script = script.substring(0, script.lastIndexOf('.'));
-//     }
-//     return script || "unknown";
-// }
-
 function createBasicHTML(){
     "use strict";
     return '<html><head></head><body><section id="uitests"></section></body></html>';
+}
+
+function createElement(tag, classes){
+    "use strict"
+    var element = utils.node(tag);
+    if(classes){
+        classes.forEach(function(className){
+            elemt.className += className + " ";
+        });
+    }
 }
 
 /**
@@ -50,13 +35,18 @@ exports.create = function create(tester, params) {
 function HTMLExporter(tester, params) {
     "use strict";
 
-    var filepath     = params['filepath']      || undefined
-      , templatePath = params['templatePath']  || undefined
-      , cssPath      = params['cssPath']       || undefined
-      , replaceId    = params['replaceId']     || "uitests"
-      , useTable     = params['useTable']      || true
-      , logFile      = null
-      , exporter     = this
+    var filepath            = params['filepath']            || undefined
+      , templatePath        = params['templatePath']        || undefined
+      , cssPaths            = params['cssPaths']            || undefined
+      , jsPaths             = params['jsPaths']             || undefined
+      , containerId         = params['containerId']         || "uitests"
+      , useTable            = params['useTable']            || true
+      , testsuiteTemplate   = params['testsuiteTemplate']   || undefined
+      , testsuiteId         = params['testsuiteId']         || undefined
+      , testcaseTemplate    = params['testcaseTemplate']    || undefined
+      , images              = params['images']              || undefined
+      , logFile             = null
+      , exporter            = this
     ;
 
     if(filepath){
@@ -79,13 +69,14 @@ function HTMLExporter(tester, params) {
         tester.on('exporter.save', function exporterSave(){
             var template = null
               , cssAttrs = null
+              , jsAttrs = null
+              , tempEl
             ;
 
             if(templatePath){
                 try {
                     template = fs.read(templatePath);
-                    
-                } catch (e){
+                } catch (e) {
                     tester.casper.echo(f('Unable to read from %s: %s', templatePath, e), 'ERROR', 80);
                 }
             }else{
@@ -95,34 +86,69 @@ function HTMLExporter(tester, params) {
             logFile = document.open("text/html");
             logFile.write(template);
 
-            if(cssPath){
-                cssAttrs = {
-                      rel  : "stylesheet"
-                    , type : "text/css"
-                    , href : cssPath
-                };
+            // Add any css files 
+            if(cssPaths){
+                cssPaths.forEach(function(css){
+                    cssAttrs = {
+                          rel  : "stylesheet"
+                        , type : "text/css"
+                        , href : css
+                    };
 
-                logFile.getElementsByTagName("head")[0].appendChild(utils.node("link", cssAttrs));
+                    logFile.getElementsByTagName("head")[0].appendChild(utils.node("link", cssAttrs));
+                });
             }
 
+            //First add the testsuite template
+            if(testsuiteTemplate){
+                tempEl = document.createElement('div');
+                tempEl.innerHTML = testsuiteTemplate;
+
+                logFile.getElementById(containerId).appendChild(tempEl.firstChild);
+            } else {
+                testsuiteId = containerId;
+            }
+
+            // Do something with the _tests array
             if(exporter._tests){
+                if(testcaseTemplate && images && images.tick && images.cross){
+                    for(var test in exporter._tests){
+                        tempEl = document.createElement('div');
+                        tempEl.innerHTML = utils.format(testcaseTemplate, exporter._tests[test].name, exporter._tests[test].pass ? images.tick.src : images.cross.src);
 
-                var testUl = utils.node("ul");
+                        logFile.getElementById(testsuiteId).appendChild(tempEl.firstChild);
+                    }
+                }else{
+                    var testUl = utils.node("ul");
 
-                for(var test in exporter._tests){
-                    var testLi = utils.node('li');
-                
-                    testLi.innerHTML = exporter._tests[test].name + " " + exporter._tests[test].pass; 
+                    for(var test in exporter._tests){
+                        var testLi = utils.node('li');
+                    
+                        testLi.innerHTML = exporter._tests[test].name + " ..." + exporter._tests[test].pass ? "passed" : "failed"; 
 
-                    testUl.appendChild(testLi);
+                        testUl.appendChild(testLi);
+                    }
+
+                    logFile.getElementById(testsuiteId).appendChild(testUl);
                 }
-
-                logFile.getElementById(replaceId).appendChild(testUl);
             }else {
+
                 var pTag = utils.node('p');
                 pTag.innerHTML = "no tests";
 
-                logFile.getElementById(replaceId).appendChild(pTag);
+                logFile.getElementById(testsuiteId).appendChild(pTag);
+            }
+
+            // Add any javascript files
+            if(jsPaths){
+                jsPaths.forEach(function(js){
+                    jsAttrs = {
+                          type : "text/javascript"
+                        , href : js
+                    };
+
+                    logFile.getElementsByTagName("body")[0].appendChild(utils.node("script", jsAttrs));
+                });
             }
 
             try {

@@ -738,9 +738,12 @@ Tester.prototype.configure = function configure() {
  *
  * @param  String  exporter
  */
-Tester.prototype.createExporter = function createExporter(exporter){
-    if( exporter ){
-        require(exporter).create(this, this.exporters[exporter]);
+Tester.prototype.createExporter = function createExporter(name){
+    var exporter = this.exporters[name];
+
+    if( utils.isObject(exporter) && exporter.type ){
+
+        require(exporter.type).create(this, exporter);
     }
 };
 
@@ -903,10 +906,12 @@ Tester.prototype.pass = function pass(message) {
  */
 Tester.prototype.processAssertionResult = function processAssertionResult(result) {
     "use strict";
-    var eventName= 'success',
-        message = result.message || result.standard,
-        style = 'INFO',
-        status = this.options.passText;
+    var eventName   = 'success'
+      , message     = result.message || result.standard
+      , style       = 'INFO'
+      , status      = this.options.passText
+    ;
+
     if (!result.success) {
         eventName = 'fail';
         style = 'RED_BAR';
@@ -915,6 +920,7 @@ Tester.prototype.processAssertionResult = function processAssertionResult(result
     } else {
         this.testResults.passed++;
     }
+
     this.casper.echo([this.colorize(status, style), this.formatMessage(message)].join(' '));
     this.emit(eventName, result);
     if (this.options.failFast && !result.success) {
