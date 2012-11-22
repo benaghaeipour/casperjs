@@ -99,7 +99,7 @@ this.loadIncludes.forEach(function(include){
  * Checks the cli for xunit and adds the exporter
  */
 if(casper.cli.has('xunit')){
-    casper.test.addExporter("xunit", {filepath: casper.cli.get('xunit')});
+    casper.test.addExporter("xunit", {type: 'xunit', filepath: casper.cli.get('xunit')});
 }
 
 // test suites completion listener
