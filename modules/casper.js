@@ -1389,10 +1389,10 @@ Casper.prototype.setHttpAuth = function setHttpAuth(username, password) {
  * @param  function then      Next step function to execute on page loaded (optional)
  * @return Casper
  */
-Casper.prototype.start = function start(location, then) {
+Casper.prototype.start = function start(location, then, name) {
     "use strict";
     /*jshint maxstatements:30*/
-    this.emit('starting');
+    this.emit('starting', name);
     this.log('Starting...', "info");
     this.startTime = new Date().getTime();
     this.history = [];
@@ -1457,9 +1457,10 @@ Casper.prototype.status = function status(asString) {
  * @param  function  step  A function to be called as a step
  * @return Casper
  */
-Casper.prototype.then = function then(step) {
+Casper.prototype.then = function then(step, name) {
     "use strict";
     this.checkStarted();
+    this.emit('step.adding', name);
     if (!utils.isFunction(step)) {
         throw new CasperError("You can only define a step as a function");
     }
