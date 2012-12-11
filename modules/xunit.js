@@ -81,7 +81,7 @@ exports.create = function create(tester, params) {
 function XUnitExporter(tester, params) {
     "use strict";
 
-    var filepath = params['filepath'] || undefined;
+    var filepath = params['filePath'] || undefined;
     var exporter = this;
 
     if(filepath){

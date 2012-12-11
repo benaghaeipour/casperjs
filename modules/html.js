@@ -20,33 +20,31 @@ exports.create = function create(tester, params) {
 function HTMLExporter(tester, params) {
   "use strict";
 
-  var testsuitesName      = params['name']                || undefined
-    , filePath            = params['filePath']            || undefined
-    , templatePath        = params['templatePath']        || undefined
-    , cssPaths            = params['cssPaths']            || undefined
-    , jsPaths             = params['jsPaths']             || undefined
-    , success             = params['success']             || undefined
-    , failure             = params['failure']             || undefined
-    , logFile             = null
-    , testsuites          = []
-    , currentTestsuite    = {}
-    , currentTestcase     = {}
+  this.projectName    = params['name']         || undefined;
+  this.filePath       = params['filePath']     || undefined;
+  this.templatePath   = params['templatePath'] || undefined;
+  this.cssPaths       = params['cssPaths']     || undefined;
+  this.jsPaths        = params['jsPaths']      || undefined;
+  this.success        = params['success']      || undefined;
+  this.failure        = params['failure']      || undefined;
+  this.tester         = tester;
+  this.testsuites     = [];
+
+  var logFile             = null
     , exporter            = this
   ;
 
-  if(filePath && templatePath){
-    this.filePath = filePath;
-    this.templatePath = templatePath
+  if(this.filePath && this.templatePath){
 
-    tester.on('starting', function onStarting(name){
-      exporter.addTestsuite(name);
+    tester.casper.on('starting', function onStarting(name){
+      exporter.addTestsuite(name, exporter);
     });
 
     tester.on('test.done', function onTestDone(){
       exporter.saveTestsuite();
     });
 
-    tester.on('step.adding', function onStepAdding(step){
+    tester.casper.on('step.adding', function onStepAdding(step){
       exporter.addTestcase(step);
     });
 
@@ -73,8 +71,9 @@ exports.HTMLExporter = HTMLExporter;
  */
 HTMLExporter.prototype.addSuccess = function addSuccess(description, pass) {
   "use strict";
-
-  this.currentTestcase.addTest(new Test(description, true));
+  if(this.currentTestcase){
+    this.currentTestcase.addTest(new Test(description, true));
+  }
 };
 
 /**
@@ -87,8 +86,9 @@ HTMLExporter.prototype.addSuccess = function addSuccess(description, pass) {
  */
 HTMLExporter.prototype.addFailure = function addFailure(description, pass, message, type) {
   "use strict";
-
-  this.currentTestcase.addTest(new Test(description, false, message, type));
+  if(this.currentTestcase){
+    this.currentTestcase.addTest(new Test(description, false, message, type));
+  }
 };
 
 /**
@@ -97,8 +97,8 @@ HTMLExporter.prototype.addFailure = function addFailure(description, pass, messa
  */
 HTMLExporter.prototype.addTestsuite = function addTestsuite(name){
   "use strict";
-
-  this.currentTestsuite = new Testsuite(name);
+  this.tester.casper.echo('Testsuite ' + name + ' added');
+  this.currentTestsuite = new Testsuite(name, this);
 };
 
 /**
@@ -107,10 +107,12 @@ HTMLExporter.prototype.addTestsuite = function addTestsuite(name){
  */
 HTMLExporter.prototype.saveTestsuite = function saveTestsuite(){
   "use strict";
-
-  var testsuite = utils.clone(this.currentTestsuite);
-  this.testsuites.push(testsuite);
-  this.currentTestsuite = null;
+  if(this.currentTestsuite != null){
+    //var testsuite = utils.clone(this.currentTestsuite);
+    this.testsuites.push(this.currentTestsuite);
+    //this.currentTestsuite = null;
+    this.tester.casper.echo('Testsuite ' + name + ' saved');
+  }
 };
 
 /**
@@ -119,9 +121,14 @@ HTMLExporter.prototype.saveTestsuite = function saveTestsuite(){
  */
 HTMLExporter.prototype.addTestcase = function addTestcase(name){
   "use strict";
-
-  this.currentTestcase = new Testcase(name);
-  this.currentTestsuite.testcases.push(this.currentTestcase);
+  this.tester.casper.echo('Testsuite = ' + this.currentTestsuite.name);
+  if(this.currentTestsuite){
+    this.currentTestcase = new Testcase(name);
+    this.currentTestsuite.addTestcase(this.currentTestcase);
+    this.tester.casper.echo('Testcase ' + name + ' added');
+  }else{
+    this.tester.casper.echo('Testcase ' + name + ' added');
+  }
 };
 
 
@@ -130,13 +137,14 @@ HTMLExporter.prototype.save = function save(){
 
   var template
     , logFile
+    , that = this
   ;
 
   if(this.templatePath){
     try {
       template = fs.read(this.templatePath);
     } catch (e) {
-      tester.casper.echo(f('Unable to read from %s: %s', this.templatePath, e), 'ERROR', 80);
+      this.tester.casper.echo(f('Unable to read from %s: %s', this.templatePath, e), 'ERROR', 80);
     }
   }
 
@@ -156,9 +164,11 @@ HTMLExporter.prototype.save = function save(){
     });
   }
 
-  this.testsuites.forEach(function(testsuite){
-    logFile.getElementsById("uitests").appendChild(testsuite.print());
-  });
+  if(this.testsuites.length > 0){
+    this.testsuites.forEach(function(testsuite){
+      logFile.getElementById("uitests").appendChild(testsuite.print());
+    });
+  }
 
   // Add any javascript files at the end of body
   if(this.jsPaths){
@@ -172,50 +182,61 @@ HTMLExporter.prototype.save = function save(){
     });
   }
 
-
-
+  try {
+      fs.write(this.filePath, logFile.documentElement.outerHTML, 'w');
+      this.tester.casper.echo(f('Result log stored in %s', this.filePath), 'INFO', 80);
+  } catch (e) {
+      this.tester.casper.echo(f('Unable to write results to %s: %s', this.filePath, e), 'ERROR', 80);
+  }
 };
 
-function Testsuite(name){
+function Testsuite(name, exporter){
   "use strict";
 
   this.name = name;
+  this.projectName = exporter.testsuitesName;
   this.testcases = [];
   this.testcasesCount = 0;
-  this.template = '<div id="[testsuite_name]_[testsuite_name]" class="testsuite row">
-                    <div class="span12">
-                      <div class="row">
-                        <h2 class="testsuite_header span12">[testsuite_name] <img class="test_pass" src="[testsuite_pass_image]" /></h2>
-                      </div>
-                      <div class="row">
-                        <div class="testsuite_tests span12"></div>
-                      </div>
-                    </div>
+  this.template = '<div id="[testsuites_name]_[testsuite_name]" class="testsuite row"> \
+                    <div class="span12"> \
+                      <div class="row"> \
+                        <h2 class="testsuite_header span12">[testsuite_name] <img class="test_pass" src="[testsuite_pass_image]" /></h2> \
+                      </div> \
+                      <div class="row"> \
+                        <div class="testsuite_tests span12"></div> \
+                      </div> \
+                    </div> \
                   </div>';
-
-  function addTestcase(testcase){
-    this.testcases.push(testcase);
-    this.testcasesCount ++;
-  }
-
-  function print(){
-    var testcases
-      , template = document.open("text/html");
-      
-    template.write(this.template);
-
-    template.replace(/[testsuites_name]/, this.testsuitesName);
-    template.replace(/[testsuite_name]/, this.testsuiteName);
-
-
-    this.testcases.forEach(function(testcase){
-      testcases.print();
-    });
-
-
-    return template;
-  }
+  this.pass = false;
+  this.exporter = exporter;
 }
+
+Testsuite.prototype.addTestcase = function addTestcase(testcase){
+  this.testcases.push(testcase);
+  this.testcasesCount ++;
+};
+
+Testsuite.prototype.print = function print(){
+  var testcases
+    //, template = document.open("text/html")
+    , tmpMarkup = this.template
+    , el = document.createElement("div");
+  ;
+
+  tmpMarkup.replace(/[testsuites_name]/, this.projectName);
+  tmpMarkup.replace(/[testsuite_name]/, this.name);
+  tmpMarkup.replace(/[testsuite_pass_image]/, this.pass ? this.exporter.success : this.exporter.failure);
+
+  el.innerText = tmpMarkup;
+
+  //template.write(tmpMarkup);
+
+  // this.testcases.forEach(function(testcase){
+  //   testcases.print();
+  // });
+  
+  return el;
+};
 
 function Testcase(name){
   "use strict";
@@ -225,37 +246,38 @@ function Testcase(name){
   this.pass = false;
   this.testCount = 0;
   this.screenshots = [];
-  this.template = '<div class="testcase row">
-                    <div class="span12">
-                      <div class="row">
-                        <h3 class="testcase_header span12">[testcase_name] <img class="test_pass" src="[testcase_pass_image]" /></h3>
-                      </div>
-                      <div class="row">
-                        <div class="testcase_tests span12">[testcase_tests]</div>
-                      </div>
-                      <div class="row">
-                        <div class="testcase_screenshots span12">[testcase_screenshots]</div>
-                      </div>
-                    </div>
+  this.template = '<div class="testcase row"> \
+                    <div class="span12"> \
+                      <div class="row"> \
+                        <h3 class="testcase_header span12">[testcase_name] <img class="test_pass" src="[testcase_pass_image]" /></h3> \
+                      </div> \
+                      <div class="row"> \
+                        <div class="testcase_tests span12">[testcase_tests]</div> \
+                      </div> \
+                      <div class="row"> \
+                        <div class="testcase_screenshots span12">[testcase_screenshots]</div> \
+                      </div> \
+                    </div> \
                   </div>';
 
   this.screenshotsLinkTemplate = '<span class="screenshots_link">Show Images</span>';
   this.screenshotTemplate      = '<div class="test_screenshot"><img class="screenshot" src="[screenshot]" /> <p class="screenshot_caption">[screenshot_caption]</p></div>';
-
-  function addTest(test){
-    this.tests.push(test);
-    this.testCount ++;
-  }
-
-  function addScreenshot(screenshot){
-    this.screenshots.push(screenshot);
-  }
-
-  function print(){
-    var template = document.open("text/html");
-    template.write(this.template);
-  }
 }
+
+Testcase.prototype.addTest = function addTest(test){
+  this.tests.push(test);
+  this.testCount ++;
+};
+
+Testcase.prototype.addScreenshot = function addScreenshot(screenshot){
+
+  this.screenshots.push(screenshot);
+};
+
+Testcase.prototype.print = function print(){
+  var template = document.open("text/html");
+  template.write(this.template);
+};
 
 function Test(description, pass, message, type){
   "use strict";

@@ -97,15 +97,23 @@ function initRunner() {
         }
     });
 
+    /*
+     * This is for backwards compatability.
+     * Checks the cli for xunit and adds the exporter
+     */
+    if(casper.cli.has('xunit')){
+        casper.test.addExporter("xunit", {type: 'xunit', filePath: casper.cli.get('xunit')});
+    }
+
     // test suites completion listener
     casper.test.on('tests.complete', function() {
-        this.renderResults(true, undefined, casper.cli.get('xunit') || undefined);
+        "use strict";
+        this.renderResults(true, undefined);
         if (this.options.failFast && this.testResults.failures.length > 0) {
             casper.warn('Test suite failed fast, all tests may not have been executed.');
         }
     });
 }
-
 
 var error;
 try {
@@ -115,23 +123,6 @@ try {
     casper.warn(e);
     casper.exit(1);
 }
-
-/*
- * This is for backwards compatability.
- * Checks the cli for xunit and adds the exporter
- */
-if(casper.cli.has('xunit')){
-    casper.test.addExporter("xunit", {type: 'xunit', filepath: casper.cli.get('xunit')});
-}
-
-// test suites completion listener
-casper.test.on('tests.complete', function() {
-    "use strict";
-    this.renderResults(true, undefined);
-    if (this.options.failFast && this.testResults.failures.length > 0) {
-        casper.warn('Test suite failed fast, all tests may not have been executed.');
-    }
-});
 
 if (!error) {
     initRunner();

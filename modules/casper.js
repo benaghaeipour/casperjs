@@ -35,7 +35,6 @@ var events = require('events');
 var fs = require('fs');
 var http = require('http');
 var mouse = require('mouse');
-var pagestack = require('pagestack');
 var qs = require('querystring');
 var tester = require('tester');
 var utils = require('utils');
@@ -76,7 +75,7 @@ exports.selectXPath = selectXPath;
  */
 var Casper = function Casper(options) {
     "use strict";
-    /*jshint maxstatements:40*/
+    /*jshint maxstatements:30*/
     // init & checks
     if (!(this instanceof Casper)) {
         return new Casper(options);
@@ -140,7 +139,6 @@ var Casper = function Casper(options) {
     this.mouse = mouse.create(this);
     this.page = null;
     this.pendingWait = false;
-    this.popups = pagestack.create();
     this.requestUrl = 'about:blank';
     this.resources = [];
     this.result = {
@@ -165,6 +163,7 @@ var Casper = function Casper(options) {
         var notices = [];
         if (match && match.length === 4) {
             notices.push('  in module ' + match[2]);
+            notices.push('  NOTICE: errors within modules cannot be backtraced yet.');
             msg = match[3];
         }
         console.error(c.colorize(msg, 'RED_BAR', 80));
@@ -222,7 +221,7 @@ Casper.prototype.back = function back() {
 Casper.prototype.base64encode = function base64encode(url, method, data) {
     "use strict";
     return this.evaluate(function _evaluate(url, method, data) {
-        return __utils__.getBase64(url, method, data);
+        return window.__utils__.getBase64(url, method, data);
     }, url, method, data);
 };
 
@@ -387,11 +386,7 @@ Casper.prototype.clear = function clear() {
 Casper.prototype.click = function click(selector) {
     "use strict";
     this.checkStarted();
-    var success = this.mouseEvent('click', selector);
-    this.evaluate(function(selector) {
-        document.querySelector(selector).focus();
-    }, selector);
-    return success;
+    return this.mouseEvent('click', selector);
 };
 
 /**
@@ -647,7 +642,7 @@ Casper.prototype.exists = function exists(selector) {
     "use strict";
     this.checkStarted();
     return this.evaluate(function _evaluate(selector) {
-        return __utils__.exists(selector);
+        return window.__utils__.exists(selector);
     }, selector);
 };
 
@@ -674,7 +669,7 @@ Casper.prototype.fetchText = function fetchText(selector) {
     "use strict";
     this.checkStarted();
     return this.evaluate(function _evaluate(selector) {
-        return __utils__.fetchText(selector);
+        return window.__utils__.fetchText(selector);
     }, selector);
 };
 
@@ -694,7 +689,7 @@ Casper.prototype.fill = function fill(selector, vals, submit) {
     }
     this.emit('fill', selector, vals, submit);
     var fillResults = this.evaluate(function _evaluate(selector, values) {
-       return __utils__.fill(selector, values);
+       return window.__utils__.fill(selector, values);
     }, selector, vals);
     if (!fillResults) {
         throw new CasperError("Unable to fill form");
@@ -719,10 +714,10 @@ Casper.prototype.fill = function fill(selector, vals, submit) {
     // Form submission?
     if (submit) {
         this.evaluate(function _evaluate(selector) {
-            var form = __utils__.findOne(selector);
+            var form = window.__utils__.findOne(selector);
             var method = (form.getAttribute('method') || "GET").toUpperCase();
             var action = form.getAttribute('action') || "unknown";
-            __utils__.log('submitting form to ' + action + ', HTTP ' + method, 'info');
+            window.__utils__.log('submitting form to ' + action + ', HTTP ' + method, 'info');
             if (typeof form.submit === "function") {
                 form.submit();
             } else {
@@ -831,29 +826,12 @@ Casper.prototype.getElementBounds = function getElementBounds(selector) {
         throw new CasperError("No element matching selector found: " + selector);
     }
     var clipRect = this.evaluate(function _evaluate(selector) {
-        return __utils__.getElementBounds(selector);
+        return window.__utils__.getElementBounds(selector);
     }, selector);
     if (!utils.isClipRect(clipRect)) {
         throw new CasperError('Could not fetch boundaries for element matching selector: ' + selector);
     }
     return clipRect;
-};
-
-/**
- * Retrieves information about the node matching the provided selector.
- *
- * @param  String|Objects  selector  CSS3/XPath selector
- * @return Object
- */
-Casper.prototype.getElementInfo = function getElementInfo(selector) {
-    "use strict";
-    this.checkStarted();
-    if (!this.exists(selector)) {
-        throw new CasperError(f("Cannot get informations from %s: element not found.", selector));
-    }
-    return this.evaluate(function(selector) {
-        return __utils__.getElementInfo(selector);
-    }, selector);
 };
 
 /**
@@ -869,7 +847,7 @@ Casper.prototype.getElementsBounds = function getElementBounds(selector) {
         throw new CasperError("No element matching selector found: " + selector);
     }
     return this.evaluate(function _evaluate(selector) {
-        return __utils__.getElementsBounds(selector);
+        return window.__utils__.getElementsBounds(selector);
     }, selector);
 };
 
@@ -905,7 +883,7 @@ Casper.prototype.getGlobal = function getGlobal(name) {
             result.value = JSON.stringify(window[name]);
         } catch (e) {
             var message = f("Unable to JSON encode window.%s: %s", name, e);
-            __utils__.log(message, "error");
+            window.__utils__.log(message, "error");
             result.error = message;
         }
         return result;
@@ -1037,7 +1015,7 @@ Casper.prototype.injectClientUtils = function injectClientUtils() {
     "use strict";
     this.checkStarted();
     var clientUtilsInjected = this.page.evaluate(function() {
-        return typeof __utils__ === "object";
+        return typeof window.__utils__ === "object";
     });
     if (true === clientUtilsInjected) {
         return;
@@ -1135,17 +1113,22 @@ Casper.prototype.log = function log(message, level, space) {
 Casper.prototype.mouseEvent = function mouseEvent(type, selector) {
     "use strict";
     this.checkStarted();
-    this.log(f("Mouse event '%s' on selector: %s", type, selector), "debug");
+    this.log("Mouse event '" + type + "' on selector: " + selector, "debug");
     if (!this.exists(selector)) {
-        throw new CasperError(f("Cannot dispatch '%s' event on nonexistent selector: %s", type, selector));
+        throw new CasperError(f("Cannot dispatch %s event on nonexistent selector: %s", type, selector));
     }
-    // PhantomJS doesn't provide native events for mouseover & mouseout
-    if (type === "mouseover" || type === "mouseout") {
-        return this.evaluate(function(type, selector) {
-            return __utils__.mouseEvent(type, selector);
-        }, type, selector);
+    var eventSuccess = this.evaluate(function(type, selector) {
+        return window.__utils__.mouseEvent(type, selector);
+    }, type, selector);
+    if (!eventSuccess) {
+        // fallback onto native QtWebKit mouse events
+        try {
+            this.mouse.processEvent(type, selector);
+        } catch (e) {
+            this.log(f("Couldn't emulate '%s' event on %s: %s", type, selector, e), "error");
+            return false;
+        }
     }
-    this.mouse.processEvent(type, selector);
     return true;
 };
 
@@ -1329,45 +1312,6 @@ Casper.prototype.runStep = function runStep(step) {
 };
 
 /**
- * Sends keys to given element.
- *
- * @param  String  selector  A DOM CSS3 compatible selector
- * @param  String  keys      A string representing the sequence of char codes to send
- * @param  Object  options   Options
- * @return Casper
- */
-Casper.prototype.sendKeys = function(selector, keys, options) {
-    "use strict";
-    if (phantom.version.major === 1 && phantom.version.minor < 7) {
-        throw new CasperError('sendKeys() requires PhantomJS >= 1.7');
-    }
-    this.checkStarted();
-    options = utils.mergeObjects({
-        eventType: 'keypress'
-    }, options || {});
-    var elemInfos = this.getElementInfo(selector),
-        tag = elemInfos.nodeName.toLowerCase(),
-        type = utils.getPropertyPath(elemInfos, 'attributes.type'),
-        supported = ["color", "date", "datetime", "datetime-local", "email",
-                     "hidden", "month", "number", "password", "range", "search",
-                     "tel", "text", "time", "url", "week"];
-    var isTextInput = false;
-    if (tag === 'textarea' || (tag === 'input' && supported.indexOf(type) !== -1)) {
-        // clicking on the input element brings it focus
-        isTextInput = true;
-        this.click(selector);
-    }
-    this.page.sendEvent(options.eventType, keys);
-    if (isTextInput) {
-        // remove the focus
-        this.evaluate(function(selector) {
-            __utils__.findOne(selector).blur();
-        }, selector);
-    }
-    return this;
-};
-
-/**
  * Sets current WebPage instance the credentials for HTTP authentication.
  *
  * @param  String  username
@@ -1396,7 +1340,6 @@ Casper.prototype.start = function start(location, then, name) {
     this.log('Starting...', "info");
     this.startTime = new Date().getTime();
     this.history = [];
-    this.popups = pagestack.create();
     this.steps = [];
     this.step = 0;
     // Option checks
@@ -1405,7 +1348,7 @@ Casper.prototype.start = function start(location, then, name) {
         this.options.logLevel = "warning";
     }
     if (!utils.isWebPage(this.page)) {
-        this.page = this.mainPage = utils.isWebPage(this.options.page) ? this.options.page : createPage(this);
+        this.page = utils.isWebPage(this.options.page) ? this.options.page : createPage(this);
     }
     this.page.settings = utils.mergeObjects(this.page.settings, this.options.pageSettings);
     if (utils.isClipRect(this.options.clipRect)) {
@@ -1429,7 +1372,7 @@ Casper.prototype.start = function start(location, then, name) {
     if (utils.isString(location) && location.length > 0) {
         return this.thenOpen(location, utils.isFunction(then) ? then : this.createStep(function _step() {
             this.log("start page is loaded", "debug");
-        }, {skipLog: true}));
+        }, {skipLog: true}), name);
     }
     return this;
 };
@@ -1533,19 +1476,21 @@ Casper.prototype.thenEvaluate = function thenEvaluate(fn, context) {
  * @return Casper
  * @see    Casper#open
  */
-Casper.prototype.thenOpen = function thenOpen(location, settings, then) {
+Casper.prototype.thenOpen = function thenOpen(location, settings, then, name) {
     "use strict";
     this.checkStarted();
     if (!(settings && !utils.isFunction(settings))) {
+      name = then;
       then = settings;
       settings = null;
     }
+
     this.then(this.createStep(function _step() {
         this.open(location, settings);
     }, {
         skipLog: true
-    }));
-    return utils.isFunction(then) ? this.then(then) : this;
+    }), name);
+    return utils.isFunction(then) ? this.then(then, name) : this;
 };
 
 /**
@@ -1621,7 +1566,7 @@ Casper.prototype.visible = function visible(selector) {
     "use strict";
     this.checkStarted();
     return this.evaluate(function _evaluate(selector) {
-        return __utils__.visible(selector);
+        return window.__utils__.visible(selector);
     }, selector);
 };
 
@@ -1982,7 +1927,6 @@ exports.Casper = Casper;
  * @return WebPage
  */
 function createPage(casper) {
-    /*jshint maxstatements:20*/
     "use strict";
     var page = require('webpage').create();
     page.onAlert = function onAlert(message) {
@@ -2063,17 +2007,6 @@ function createPage(casper) {
             casper.navigationRequested  = true;
         }
         casper.emit('navigation.requested', url, navigationType, navigationLocked, isMainFrame);
-    };
-    page.onPageCreated = function onPageCreated(popupPage) {
-        casper.emit('popup.created', popupPage);
-        popupPage.onLoadFinished = function onLoadFinished() {
-            casper.popups.push(popupPage);
-            casper.emit('popup.loaded', popupPage);
-        };
-        popupPage.onClosing = function onClosing(closedPopup) {
-            casper.popups.clean(closedPopup);
-            casper.emit('popup.closed', closedPopup);
-        };
     };
     page.onPrompt = function onPrompt(message, value) {
         return casper.filter('page.prompt', message, value);

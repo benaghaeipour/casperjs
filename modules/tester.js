@@ -85,7 +85,15 @@ var Tester = function Tester(casper, options) {
     };
 
     this.configure();
-    
+
+    this.on('exporter.add', function(name){
+        this.casper.echo('exporter ' + name + ' added');
+    });
+
+    this.on('comment.show', function(msg){
+        this.casper.echo(msg);
+    });
+
     this.on('success', function onSuccess(success) {
         this.testResults.passes.push(success);
     });
@@ -143,8 +151,8 @@ exports.Tester = Tester;
  * Adds or overwrites exporter in exporters
  */
 Tester.prototype.addExporter = function addExporter(name, parameters){
+    parameters["name"] = name;
     this.exporters[name] = parameters;
-    this.emit('exporter.added', name);
     this.createExporter(name);
 };
 
@@ -740,9 +748,8 @@ Tester.prototype.configure = function configure() {
  */
 Tester.prototype.createExporter = function createExporter(name){
     var exporter = this.exporters[name];
-
+    
     if( utils.isObject(exporter) && exporter.type ){
-
         require(exporter.type).create(this, exporter);
     }
 };
