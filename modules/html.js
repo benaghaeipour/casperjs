@@ -250,12 +250,12 @@ Testsuite.prototype.print = function print(){
   tmpMarkup = tmpMarkup.replace(/\[testsuites_name\]/gm, this.projectName);
   tmpMarkup = tmpMarkup.replace(/\[testsuite_name\]/gm, this.name);
   
-  this.testcases.forEach(function(testcase){
-    if(testcase){
-      this.pass = this.pass && testcase.pass;
-      testsuite_tests += testcase.print();
+  for(testcase in this.testcases){
+    if(this.testcases[testcase]){
+      this.pass = this.pass && this.testcases[testcase].pass;
+      testsuite_tests += this.testcases[testcase].print();
     }
-  });
+  }
   
   tmpMarkup = tmpMarkup.replace(/\[testsuite_tests\]/gm, testsuite_tests);
 
@@ -313,7 +313,7 @@ Testcase.prototype.print = function print(){
     if(test){
       this.pass = this.pass && test.pass;
 
-      testcase_tests = test.print();
+      testcase_tests += test.print();
     }
   });
 
