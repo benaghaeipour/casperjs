@@ -28,7 +28,7 @@ function HTMLExporter(tester, params) {
   this.success        = params['success']      || undefined;
   this.failure        = params['failure']      || undefined;
   this.tester         = tester;
-  this.testsuites     = [];
+  this.testsuites     = {};
 
   var logFile             = null
     , exporter            = this
@@ -37,7 +37,7 @@ function HTMLExporter(tester, params) {
   if(this.filePath && this.templatePath){
 
     tester.casper.on('starting', function onStarting(name){
-      exporter.addTestsuite(name, exporter);
+      exporter.addTestsuite(name);
     });
 
     tester.on('test.done', function onTestDone(){
@@ -45,7 +45,9 @@ function HTMLExporter(tester, params) {
     });
 
     tester.casper.on('step.adding', function onStepAdding(step){
-      exporter.addTestcase(step);
+      if(utils.isString(step)){
+        exporter.addTestcase(step);
+      }
     });
 
     tester.on('success', function onSuccess(success) {
@@ -72,7 +74,8 @@ exports.HTMLExporter = HTMLExporter;
 HTMLExporter.prototype.addSuccess = function addSuccess(description, pass) {
   "use strict";
   if(this.currentTestcase){
-    this.currentTestcase.addTest(new Test(description, true));
+    this.tester.casper.echo('Success added to ' + this.currentTestcase.name);
+    this.currentTestcase.addTest(new Test(description, true, this));
   }
 };
 
@@ -87,7 +90,8 @@ HTMLExporter.prototype.addSuccess = function addSuccess(description, pass) {
 HTMLExporter.prototype.addFailure = function addFailure(description, pass, message, type) {
   "use strict";
   if(this.currentTestcase){
-    this.currentTestcase.addTest(new Test(description, false, message, type));
+    this.tester.casper.echo('Failure added to ' + currentTestcase.name);
+    this.currentTestcase.addTest(new Test(description, false, this, message, type));
   }
 };
 
@@ -108,12 +112,12 @@ HTMLExporter.prototype.addTestsuite = function addTestsuite(name){
 HTMLExporter.prototype.saveTestsuite = function saveTestsuite(){
   "use strict";
   if(this.currentTestsuite != null){
-    //var testsuite = utils.clone(this.currentTestsuite);
-    this.testsuites.push(this.currentTestsuite);
-    //this.currentTestsuite = null;
-    this.tester.casper.echo('Testsuite ' + name + ' saved');
+    var objCurrentTestsuite = {};
+    objCurrentTestsuite[this.currentTestsuite.name] = this.currentTestsuite;
+    utils.mergeObjects(this.testsuites, objCurrentTestsuite);
+    this.tester.casper.echo('Testsuite saved');
   }
-};
+}
 
 /**
  * When there is a casper.then this adds a new Testcase to the current Testsuite
@@ -123,14 +127,25 @@ HTMLExporter.prototype.addTestcase = function addTestcase(name){
   "use strict";
   this.tester.casper.echo('Testsuite = ' + this.currentTestsuite.name);
   if(this.currentTestsuite){
-    this.currentTestcase = new Testcase(name);
-    this.currentTestsuite.addTestcase(this.currentTestcase);
+    this.currentTestsuite.addTestcase(name, this.currentTestcase);
+    this.currentTestcase = new Testcase(name, this);
     this.tester.casper.echo('Testcase ' + name + ' added');
   }else{
-    this.tester.casper.echo('Testcase ' + name + ' added');
+    this.tester.casper.echo('Testcase ' + name + ' not added');
   }
 };
 
+HTMLExporter.prototype.setCurrentTestsuite = function setTestsuite(name){
+  if(this.testsuites[name].length > 0){
+    this.currentTestsuite = this.testsuites[name];
+  }
+}
+
+HTMLExporter.prototype.setCurrentTestcase = function setTestcase(name){
+  if(this.currentTestsuite.testcases[name].length > 0){
+    this.currentTestcase = this.currentTestsuite.testcases[name]
+  }
+}
 
 HTMLExporter.prototype.save = function save(){
   "use strict";
@@ -164,11 +179,14 @@ HTMLExporter.prototype.save = function save(){
     });
   }
 
-  if(this.testsuites.length > 0){
-    this.testsuites.forEach(function(testsuite){
-      logFile.getElementById("uitests").appendChild(testsuite.print());
-    });
+  //if(this.testsuites.length > 0){
+  for(testsuite in this.testsuites){
+    logFile.getElementById("uitests").appendChild(this.testsuites[testsuite].print());
   }
+    // this.testsuites.forEach(function(testsuite){
+    //   logFile.getElementById("uitests").appendChild(testsuite.print());
+    // });
+  //}
 
   // Add any javascript files at the end of body
   if(this.jsPaths){
@@ -194,56 +212,66 @@ function Testsuite(name, exporter){
   "use strict";
 
   this.name = name;
-  this.projectName = exporter.testsuitesName;
-  this.testcases = [];
+  this.projectName = exporter.projectName;
+  this.testcases = {};
   this.testcasesCount = 0;
-  this.template = '<div id="[testsuites_name]_[testsuite_name]" class="testsuite row"> \
-                    <div class="span12"> \
-                      <div class="row"> \
-                        <h2 class="testsuite_header span12">[testsuite_name] <img class="test_pass" src="[testsuite_pass_image]" /></h2> \
-                      </div> \
-                      <div class="row"> \
-                        <div class="testsuite_tests span12"></div> \
-                      </div> \
+  this.template = '<div class="span12"> \
+                    <div class="row"> \
+                      <h2 class="testsuite_header span12">[testsuite_name] <img class="test_pass" src="[testsuite_pass_image]" /></h2> \
+                    </div> \
+                    <div class="row"> \
+                      <div class="testsuite_tests span12">[testsuite_tests]</div> \
                     </div> \
                   </div>';
-  this.pass = false;
+  this.pass = true;
   this.exporter = exporter;
 }
 
-Testsuite.prototype.addTestcase = function addTestcase(testcase){
-  this.testcases.push(testcase);
-  this.testcasesCount ++;
+Testsuite.prototype.addTestcase = function addTestcase(name, testcase){
+
+  if(testcase){
+    var objCurrentTestcase = {};
+    objCurrentTestcase[name] = testcase;
+    utils.mergeObjects(this.testcases, objCurrentTestcase);
+    this.testcasesCount ++;
+  }
+
 };
 
 Testsuite.prototype.print = function print(){
-  var testcases
-    //, template = document.open("text/html")
+  var testsuite_tests = ""
     , tmpMarkup = this.template
     , el = document.createElement("div");
   ;
 
-  tmpMarkup.replace(/[testsuites_name]/, this.projectName);
-  tmpMarkup.replace(/[testsuite_name]/, this.name);
-  tmpMarkup.replace(/[testsuite_pass_image]/, this.pass ? this.exporter.success : this.exporter.failure);
+  el.setAttribute("class", "testsuite row");
+  el.setAttribute("id", this.projectName + "_"  + this.name);
 
-  el.innerText = tmpMarkup;
-
-  //template.write(tmpMarkup);
-
-  // this.testcases.forEach(function(testcase){
-  //   testcases.print();
-  // });
+  tmpMarkup = tmpMarkup.replace(/\[testsuites_name\]/gm, this.projectName);
+  tmpMarkup = tmpMarkup.replace(/\[testsuite_name\]/gm, this.name);
   
+  this.testcases.forEach(function(testcase){
+    if(testcase){
+      this.pass = this.pass && testcase.pass;
+      testsuite_tests += testcase.print();
+    }
+  });
+  
+  tmpMarkup = tmpMarkup.replace(/\[testsuite_tests\]/gm, testsuite_tests);
+
+  tmpMarkup = tmpMarkup.replace(/\[testsuite_pass_image\]/gm, this.pass ? this.exporter.success : this.exporter.failure);
+
+  el.innerHTML = tmpMarkup;
+
   return el;
 };
 
-function Testcase(name){
+function Testcase(name, exporter){
   "use strict";
 
   this.name = name;
   this.tests = [];
-  this.pass = false;
+  this.pass = true;
   this.testCount = 0;
   this.screenshots = [];
   this.template = '<div class="testcase row"> \
@@ -262,38 +290,60 @@ function Testcase(name){
 
   this.screenshotsLinkTemplate = '<span class="screenshots_link">Show Images</span>';
   this.screenshotTemplate      = '<div class="test_screenshot"><img class="screenshot" src="[screenshot]" /> <p class="screenshot_caption">[screenshot_caption]</p></div>';
+  this.exporter = exporter;
 }
 
-Testcase.prototype.addTest = function addTest(test){
+Testcase.prototype.addTest = function addTest(test, exporter){
   this.tests.push(test);
   this.testCount ++;
 };
 
 Testcase.prototype.addScreenshot = function addScreenshot(screenshot){
-
   this.screenshots.push(screenshot);
 };
 
 Testcase.prototype.print = function print(){
-  var template = document.open("text/html");
-  template.write(this.template);
+  var testcase_tests = ""
+    , tmpMarkup = this.template
+  ;
+  
+  tmpMarkup = tmpMarkup.replace(/\[testcase_name\]/gm, this.name);
+  
+  this.tests.forEach(function(test){
+    if(test){
+      this.pass = this.pass && test.pass;
+
+      testcase_tests = test.print();
+    }
+  });
+
+  tmpMarkup = tmpMarkup.replace(/\[testcase_tests\]/gm, testcase_tests);
+  tmpMarkup = tmpMarkup.replace(/\[testcase_screenshots\]/gm, "");
+
+  
+  tmpMarkup = tmpMarkup.replace(/\[testcase_pass_image\]/gm, this.pass ? this.exporter.success : this.exporter.failure);
+
+  return tmpMarkup;
 };
 
-function Test(description, pass, message, type){
+function Test(description, pass, exporter, message, type){
   "use strict";
 
   this.description = description;
   this.pass = pass;
   this.message = message;
   this.type = type;
+  this.exporter = exporter;
 
   this.template = '<div class="test"><p class="test_description">[test_description]</p> <img class="test_pass" src="[test_pass_image]"></div>';
-
-  function print(){
-    var template = document.open("text/html")
-      , tmp = this.template.replace();
-
-
-    template.write(this.template);
-  }
 }
+
+Test.prototype.print = function print(){
+  var tmpMarkup = this.template
+  ;
+
+  tmpMarkup = tmpMarkup.replace(/\[test_description\]/gm, this.description);
+  tmpMarkup = tmpMarkup.replace(/\[test_pass_image\]/gm, this.pass ? this.exporter.success : this.exporter.failure);
+
+  return tmpMarkup;
+};

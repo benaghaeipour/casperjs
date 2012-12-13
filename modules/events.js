@@ -41,6 +41,7 @@ EventEmitter.prototype.setMaxListeners = function(n) {
 
 EventEmitter.prototype.emit = function() {
   var type = arguments[0];
+  //console.log(type);
   // If there is no 'error' event listener then throw.
   if (type === 'error') {
     if (!this._events || !this._events.error ||

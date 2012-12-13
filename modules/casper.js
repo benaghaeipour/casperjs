@@ -1372,7 +1372,7 @@ Casper.prototype.start = function start(location, then, name) {
     if (utils.isString(location) && location.length > 0) {
         return this.thenOpen(location, utils.isFunction(then) ? then : this.createStep(function _step() {
             this.log("start page is loaded", "debug");
-        }, {skipLog: true}), name);
+        }, {skipLog: true}), name + "_start");
     }
     return this;
 };
@@ -1634,7 +1634,7 @@ Casper.prototype.waitDone = function waitDone() {
  * @param  Number    timeout    The max amount of time to wait, in milliseconds (optional)
  * @return Casper
  */
-Casper.prototype.waitFor = function waitFor(testFx, then, onTimeout, timeout) {
+Casper.prototype.waitFor = function waitFor(testFx, then, onTimeout, timeout, name) {
     "use strict";
     this.checkStarted();
     timeout = timeout ? timeout : this.options.waitTimeout;
@@ -1670,7 +1670,7 @@ Casper.prototype.waitFor = function waitFor(testFx, then, onTimeout, timeout) {
                 clearInterval(interval);
             }
         }, 100, this, testFx, timeout, onTimeout);
-    });
+    }, name);
 };
 
 /**
@@ -1742,13 +1742,16 @@ Casper.prototype.waitForResource = function waitForResource(test, then, onTimeou
  * @param  Number    timeout    The max amount of time to wait, in milliseconds (optional)
  * @return Casper
  */
-Casper.prototype.waitForSelector = function waitForSelector(selector, then, onTimeout, timeout) {
+Casper.prototype.waitForSelector = function waitForSelector(selector, then, onTimeout, timeout, name) {
     "use strict";
     this.checkStarted();
+    if(!utils.isFunction(onTimeout) && utils.isString(onTimeout)){
+        name = onTimeout;
+    }
     timeout = timeout ? timeout : this.options.waitTimeout;
     return this.waitFor(function _check() {
         return this.exists(selector);
-    }, then, onTimeout, timeout);
+    }, then, onTimeout, timeout, name);
 };
 
 /**

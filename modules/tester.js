@@ -62,6 +62,7 @@ var Tester = function Tester(casper, options) {
     this.currentTestFile = null;
     this.currentSuiteNum = 0;
     this.exporters = {};
+    this.liveExporters = {};
     this.loadIncludes = {
         includes: [],
         pre:      [],
@@ -88,10 +89,6 @@ var Tester = function Tester(casper, options) {
 
     this.on('exporter.add', function(name){
         this.casper.echo('exporter ' + name + ' added');
-    });
-
-    this.on('comment.show', function(msg){
-        this.casper.echo(msg);
     });
 
     this.on('success', function onSuccess(success) {
@@ -750,7 +747,7 @@ Tester.prototype.createExporter = function createExporter(name){
     var exporter = this.exporters[name];
     
     if( utils.isObject(exporter) && exporter.type ){
-        require(exporter.type).create(this, exporter);
+        this.liveExporters[name] = require(exporter.type).create(this, exporter);
     }
 };
 
