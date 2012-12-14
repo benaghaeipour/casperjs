@@ -97,25 +97,29 @@ function initRunner() {
         }
     });
 
+    /*
+     * This is for backwards compatability.
+     * Checks the cli for xunit and adds the exporter
+     */
+    if(casper.cli.has('xunit')){
+        casper.test.addExporter("xunit", {filepath: casper.cli.get('xunit')});
+    }
+
     // test suites completion listener
     casper.test.on('tests.complete', function() {
-        this.renderResults(true, undefined, casper.cli.get('xunit') || undefined);
+
+        this.renderResults(true, undefined);
         if (this.options.failFast && this.testResults.failures.length > 0) {
             casper.warn('Test suite failed fast, all tests may not have been executed.');
         }
     });
 }
 
-var error;
 try {
     checkArgs();
-} catch (e) {
-    error = true;
-    casper.warn(e);
-    casper.exit(1);
-}
-
-if (!error) {
     initRunner();
     casper.test.runSuites.apply(casper.test, tests);
+} catch (e) {
+    casper.warn(e);
+    casper.exit(1);
 }

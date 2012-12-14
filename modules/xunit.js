@@ -69,17 +69,47 @@ function generateClassName(classname) {
  *
  * @return XUnit
  */
-exports.create = function create() {
+exports.create = function create(tester, params) {
     "use strict";
-    return new XUnitExporter();
+    return new XUnitExporter(tester, params);
 };
 
 /**
  * JUnit XML (xUnit) exporter for test results.
  *
  */
-function XUnitExporter() {
+function XUnitExporter(tester, params) {
     "use strict";
+
+    var filepath = params['filepath'] || undefined;
+    var exporter = this;
+
+    if(filepath){
+        this.filepath = filepath;
+
+        tester.on('success', function onSuccess(success) {
+            exporter.addSuccess(fs.absolute(success.file), success.message || success.standard);
+        });
+
+        tester.on('fail', function onFail(failure) {
+            exporter.addFailure(
+                fs.absolute(failure.file),
+                failure.message  || failure.standard,
+                failure.standard || "test failed",
+                failure.type     || "unknown"
+            );
+        });
+
+        tester.on('exporter.save', function exporterSave(){
+            try {
+                fs.write(exporter.filepath, exporter.getXML(), 'w');
+                tester.casper.echo(f('Result log stored in %s', exporter.filepath), 'INFO', 80);
+            } catch (e) {
+                tester.casper.echo(f('Unable to write results to %s: %s', exporter.filepath, e), 'ERROR', 80);
+            }
+        });
+    }
+
     this._xml = utils.node('testsuite');
     this._xml.toString = function toString() {
         return this.outerHTML; // ouch
